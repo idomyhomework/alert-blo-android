@@ -1,0 +1,5 @@
+# Copy this file to local.properties and fill in your values.
+# local.properties is NOT committed to version control.
+
+sdk.dir=/path/to/your/Android/Sdk
+IP_SERVIDOR=http://your-server-ip
