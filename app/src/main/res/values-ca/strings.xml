@@ -1,0 +1,48 @@
+<resources>
+    <!-- Valencià -->
+    <string name="app_name">Alert BLO</string>
+    <string name="titulo_app">AlertBLO</string>
+    <string name="titulo_historial">Historial d\'alertes</string>
+
+    <!-- Permís No molestar -->
+    <string name="permiso_titulo">Permís necessari</string>
+    <string name="permiso_mensaje">Perquè les alertes crítiques sonen encara que el mòbil estiga en silenci, necessitem accés a \"No molestar\". Polsa Acceptar per a concedir-lo.</string>
+    <string name="aceptar">Acceptar</string>
+    <string name="cancelar">Cancel·lar</string>
+
+    <!-- Permís optimització de bateria -->
+    <string name="bateria_titulo">Desactivar optimització de bateria</string>
+    <string name="bateria_mensaje">Per a rebre alertes en qualsevol moment, encara que l\'app estiga tancada, el sistema no ha de limitar el seu funcionament en segon pla. Polsa Acceptar i permet que l\'app s\'execute sense restriccions.</string>
+
+    <!-- Notificacions -->
+    <string name="alerta_titulo">Alerta!</string>
+    <string name="servicio_activo">Servei d\'alertes actiu</string>
+    <string name="canal_normal">Alertes normals</string>
+    <string name="canal_urgente">Alertes urgents</string>
+
+    <!-- Estat de l\'alerta en l\'historial -->
+    <string name="estado_recibida">Rebuda</string>
+
+    <!-- Selector d\'idioma -->
+    <string name="cambiar_idioma">Canviar idioma</string>
+
+    <!-- Filtres -->
+    <string name="btn_filtros">Filtres</string>
+    <string name="buscar_hint">Cercar alerta…</string>
+    <string name="tipo_alerta_label">Tipus d\'alerta:</string>
+    <string name="filtro_todas">Totes</string>
+    <string name="filtro_urgentes">Urgents</string>
+    <string name="filtro_silenciadas">Silenciades</string>
+    <string name="filtro_fecha">Data de creació</string>
+    <string name="limpiar_filtros">Netejar</string>
+    <string name="ocultar_filtros">Amagar</string>
+
+    <!-- Estat buit -->
+    <string name="empty_historial">Encara no has rebut cap alerta</string>
+
+    <!-- Esborrar historial -->
+    <string name="borrar_historial">Esborrar historial</string>
+    <string name="borrar_titulo">Esborrar historial</string>
+    <string name="borrar_mensaje">Segur que vols esborrar totes les alertes guardades? Aquesta acció no es pot desfer.</string>
+    <string name="borrar">Esborrar</string>
+</resources>

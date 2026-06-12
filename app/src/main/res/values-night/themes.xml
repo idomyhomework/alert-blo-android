@@ -3,5 +3,7 @@
     <style name="Base.Theme.AlertBLO" parent="Theme.Material3.DayNight.NoActionBar">
         <!-- Customize your dark theme here. -->
         <!-- <item name="colorPrimary">@color/my_dark_primary</item> -->
+        <!-- Fondo de ventana: evita el parpadeo negro al recrear la Activity. -->
+        <item name="android:windowBackground">?attr/colorSurface</item>
     </style>
 </resources>

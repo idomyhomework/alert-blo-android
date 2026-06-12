@@ -66,20 +66,4 @@ public class Alerta {
         );
     }
 
-    public String getDateFormatted() {
-        try {
-            // Parsear la hora del servidor (asumiendo que viene en formato "HH:mm")
-            SimpleDateFormat sdfUTC = new SimpleDateFormat("HH:mm");
-            sdfUTC.setTimeZone(TimeZone.getTimeZone("UTC"));
-
-            // Convertir a hora local del dispositivo
-            SimpleDateFormat sdfLocal = new SimpleDateFormat("HH:mm");
-            sdfLocal.setTimeZone(TimeZone.getDefault());
-
-            return sdfLocal.format(sdfUTC.parse(fechaCreacion));
-        } catch (Exception e) {
-            return fechaCreacion;  // Si hay error, devolver la hora original
-        }
-    }
-
 }

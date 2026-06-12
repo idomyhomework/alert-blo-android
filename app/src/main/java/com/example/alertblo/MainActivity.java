@@ -2,6 +2,7 @@ package com.example.alertblo;
 
 import android.Manifest;
 import android.app.AlertDialog;
+import android.app.DatePickerDialog;
 import android.app.NotificationManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -9,17 +10,22 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.PowerManager;
 import android.provider.Settings;
-import android.widget.ArrayAdapter;
+import android.text.Editable;
+import android.text.TextWatcher;
+import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageButton;
 import android.widget.ListView;
-import android.widget.Switch;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AppCompatDelegate;
+import androidx.core.os.LocaleListCompat;
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
@@ -30,8 +36,13 @@ import com.example.alertblo.BuildConfig;
 import org.json.JSONArray;
 import org.json.JSONException;
 
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity{
 
@@ -45,15 +56,36 @@ public class MainActivity extends AppCompatActivity{
     // Lista en memoria — se carga desde SharedPreferences al arrancar
     public static final List<Alerta> alertasRecibidas = new ArrayList<>();
 
+    // Lista que ve la ListView: es la maestra filtrada. No tocar la maestra
+    // al filtrar para no romper getAlerta() ni la persistencia.
+    private final List<Alerta> alertasMostradas = new ArrayList<>();
+
+    // Tipos de filtro por categoría de alerta.
+    private static final int TIPO_TODAS       = 0;
+    private static final int TIPO_URGENTES    = 1;
+    private static final int TIPO_SILENCIADAS = 2;
+
+    // Estado actual de los filtros.
+    private String textoFiltro = "";
+    private int tipoFiltro = TIPO_TODAS;
+    private String fechaFiltro = null; // "yyyy-MM-dd" o null = sin filtro
+
     private AlertaAdapter adapter;
-    private EditText editTextAlerta;
-    private Switch switchSilencio;
+    private AlertDialog dialogoDnd;
+
+    private View panelFiltros;
+    private EditText editBuscar;
+    private Button btnFiltroTodas, btnFiltroUrgentes, btnFiltroSilenciadas, btnFiltroFecha;
+    private View textoVacio;
+    private Button btnBorrarHistorial;
 
     // Receptor local que refresca la lista cuando llega una alerta nueva
     private final BroadcastReceiver receptorAlerta = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            adapter.notifyDataSetChanged();
+            // Reaplicar el filtro vigente para que la alerta nueva respete
+            // la búsqueda/tipo/fecha activos.
+            aplicarFiltro();
         }
     };
 
@@ -61,23 +93,60 @@ public class MainActivity extends AppCompatActivity{
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        prepararApp();
 
-        editTextAlerta = findViewById(R.id.editTextAlerta);
-        switchSilencio = findViewById(R.id.switchSilencio);
-        Button btnCrearAlerta = findViewById(R.id.btnCrearAlerta);
+        // El ID del dispositivo se necesita siempre (también tras recrear la Activity).
+        ID_DISPOSITIVO = Settings.Secure.getString(
+                getContentResolver(), Settings.Secure.ANDROID_ID);
+
+        // Permisos y servicio SOLO en el arranque real. Si savedInstanceState != null
+        // es una recreación (p. ej. cambio de idioma): no los repetimos, porque
+        // relanzar el foreground service en recreaciones rápidas provoca
+        // ForegroundServiceStartNotAllowedException y la app se cierra.
+        if (savedInstanceState == null) {
+            prepararApp();
+        }
+
         ListView listaAlertas = findViewById(R.id.listaAlertas);
+
+        // Selector de idioma (bandera en el header)
+        ImageButton btnIdioma = findViewById(R.id.btnIdioma);
+        actualizarIconoIdioma(btnIdioma);
+        btnIdioma.setOnClickListener(v -> alternarIdioma());
 
         // Cargar historial guardado antes de conectar el adapter
         cargarHistorial(this);
 
-        adapter = new AlertaAdapter(this, alertasRecibidas);
+        // La ListView muestra la lista filtrada, no la maestra.
+        adapter = new AlertaAdapter(this, alertasMostradas);
         listaAlertas.setAdapter(adapter);
 
-        btnCrearAlerta.setOnClickListener(v -> crearAlerta());
+        configurarFiltros();
+        aplicarFiltro();
 
         // Consultar el servidor por si hay alguna alerta nueva
         new Thread(() -> getAlerta(this)).start();
+    }
+
+    // Devuelve el código del idioma activo de la app ("es" o "ca").
+    private String idiomaActual() {
+        LocaleListCompat locales = AppCompatDelegate.getApplicationLocales();
+        if (!locales.isEmpty()) {
+            return locales.get(0).getLanguage();
+        }
+        return getResources().getConfiguration().getLocales().get(0).getLanguage();
+    }
+
+    // Pone en el botón la bandera del idioma activo.
+    private void actualizarIconoIdioma(ImageButton btn) {
+        boolean valenciano = "ca".equals(idiomaActual());
+        btn.setImageResource(valenciano ? R.drawable.flag_va : R.drawable.flag_es);
+    }
+
+    // Alterna entre castellano y valenciano. AppCompat recrea la Activity y
+    // guarda el idioma elegido automáticamente (ver autoStoreLocales en el manifest).
+    private void alternarIdioma() {
+        String siguiente = "ca".equals(idiomaActual()) ? "es" : "ca";
+        AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(siguiente));
     }
 
     @Override
@@ -91,15 +160,24 @@ public class MainActivity extends AppCompatActivity{
     // Comprueba si la app tiene permiso para saltarse el modo No Molestar.
     // Si no lo tiene, muestra un diálogo para que el usuario lo conceda.
     private void verificarAccesoDnd() {
+        // No mostrar el diálogo si la Activity se está cerrando/recreando
+        // (evita BadTokenException al cambiar de idioma) o si ya está visible.
+        if (isFinishing() || isDestroyed()) {
+            return;
+        }
+        if (dialogoDnd != null && dialogoDnd.isShowing()) {
+            return;
+        }
         NotificationManager nm = getSystemService(NotificationManager.class);
         if (!nm.isNotificationPolicyAccessGranted()) {
-            new AlertDialog.Builder(this)
-                    .setTitle("Permiso necesario")
-                    .setMessage("Para que las alertas críticas suenen aunque el móvil esté en silencio, necesitamos acceso a \"No molestar\". Pulsa Aceptar para concederlo.")
-                    .setPositiveButton("Aceptar", (d, w) ->
+            dialogoDnd = new AlertDialog.Builder(this)
+                    .setTitle(R.string.permiso_titulo)
+                    .setMessage(R.string.permiso_mensaje)
+                    .setPositiveButton(R.string.aceptar, (d, w) ->
                             startActivity(new Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)))
-                    .setNegativeButton("Cancelar", null)
-                    .show();
+                    .setNegativeButton(R.string.cancelar, null)
+                    .create();
+            dialogoDnd.show();
         }
     }
 
@@ -107,6 +185,172 @@ public class MainActivity extends AppCompatActivity{
     protected void onPause() {
         super.onPause();
         LocalBroadcastManager.getInstance(this).unregisterReceiver(receptorAlerta);
+    }
+
+    @Override
+    protected void onDestroy() {
+        // Cerrar el diálogo si sigue abierto al recrear/destruir la Activity,
+        // para no filtrar la ventana (WindowLeaked) ni provocar un cierre.
+        if (dialogoDnd != null && dialogoDnd.isShowing()) {
+            dialogoDnd.dismiss();
+        }
+        dialogoDnd = null;
+        super.onDestroy();
+    }
+
+    // Enlaza los controles del panel de filtros y sus listeners.
+    private void configurarFiltros() {
+        Button btnFiltros          = findViewById(R.id.btnFiltros);
+        panelFiltros               = findViewById(R.id.panelFiltros);
+        editBuscar                 = findViewById(R.id.editBuscar);
+        btnFiltroTodas             = findViewById(R.id.btnFiltroTodas);
+        btnFiltroUrgentes          = findViewById(R.id.btnFiltroUrgentes);
+        btnFiltroSilenciadas       = findViewById(R.id.btnFiltroSilenciadas);
+        btnFiltroFecha             = findViewById(R.id.btnFiltroFecha);
+        Button btnLimpiar          = findViewById(R.id.btnLimpiarFiltros);
+        textoVacio                 = findViewById(R.id.textoVacio);
+        btnBorrarHistorial         = findViewById(R.id.btnBorrarHistorial);
+
+        // Botón "Filtros"/"Ocultar": muestra u oculta el panel y cambia su texto.
+        btnFiltros.setOnClickListener(v -> {
+            boolean visible = panelFiltros.getVisibility() == View.VISIBLE;
+            panelFiltros.setVisibility(visible ? View.GONE : View.VISIBLE);
+            btnFiltros.setText(visible ? R.string.btn_filtros : R.string.ocultar_filtros);
+        });
+
+        // Búsqueda en vivo por texto.
+        editBuscar.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) {}
+            @Override public void afterTextChanged(Editable s) {
+                textoFiltro = s.toString();
+                aplicarFiltro();
+            }
+        });
+
+        // Filtro por tipo.
+        btnFiltroTodas.setOnClickListener(v -> seleccionarTipo(TIPO_TODAS));
+        btnFiltroUrgentes.setOnClickListener(v -> seleccionarTipo(TIPO_URGENTES));
+        btnFiltroSilenciadas.setOnClickListener(v -> seleccionarTipo(TIPO_SILENCIADAS));
+
+        // Filtro por fecha.
+        btnFiltroFecha.setOnClickListener(v -> mostrarSelectorFecha());
+
+        // Limpiar filtros y borrar historial.
+        btnLimpiar.setOnClickListener(v -> limpiarFiltros());
+        btnBorrarHistorial.setOnClickListener(v -> confirmarBorrado());
+
+        actualizarBotonesTipo();
+    }
+
+    private void seleccionarTipo(int tipo) {
+        tipoFiltro = tipo;
+        actualizarBotonesTipo();
+        aplicarFiltro();
+    }
+
+    // Resalta el botón de tipo activo bajando la opacidad de los demás.
+    private void actualizarBotonesTipo() {
+        btnFiltroTodas.setAlpha(tipoFiltro == TIPO_TODAS ? 1f : 0.4f);
+        btnFiltroUrgentes.setAlpha(tipoFiltro == TIPO_URGENTES ? 1f : 0.4f);
+        btnFiltroSilenciadas.setAlpha(tipoFiltro == TIPO_SILENCIADAS ? 1f : 0.4f);
+    }
+
+    // Abre un DatePickerDialog y aplica la fecha elegida como filtro.
+    private void mostrarSelectorFecha() {
+        Calendar c = Calendar.getInstance();
+        new DatePickerDialog(this, (view, year, month, day) -> {
+            // Guardamos en ISO para comparar; mostramos en formato local.
+            fechaFiltro = String.format(Locale.US, "%04d-%02d-%02d", year, month + 1, day);
+            btnFiltroFecha.setText(String.format(Locale.getDefault(), "%02d/%02d/%04d", day, month + 1, year));
+            aplicarFiltro();
+        }, c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).show();
+    }
+
+    // Resetea todos los filtros a su estado inicial.
+    private void limpiarFiltros() {
+        textoFiltro = "";
+        editBuscar.setText("");
+        tipoFiltro = TIPO_TODAS;
+        actualizarBotonesTipo();
+        fechaFiltro = null;
+        btnFiltroFecha.setText(R.string.filtro_fecha);
+        aplicarFiltro();
+    }
+
+    // Reconstruye la lista mostrada aplicando texto + tipo + fecha (AND).
+    private void aplicarFiltro() {
+        alertasMostradas.clear();
+        String q = textoFiltro.toLowerCase(Locale.getDefault()).trim();
+        for (Alerta a : alertasRecibidas) {
+            if (!q.isEmpty()
+                    && (a.getTextoAlerta() == null
+                        || !a.getTextoAlerta().toLowerCase(Locale.getDefault()).contains(q))) {
+                continue;
+            }
+            if (tipoFiltro == TIPO_URGENTES && a.isSilent()) {
+                continue;
+            }
+            if (tipoFiltro == TIPO_SILENCIADAS && !a.isSilent()) {
+                continue;
+            }
+            if (fechaFiltro != null && !coincideFecha(a, fechaFiltro)) {
+                continue;
+            }
+            alertasMostradas.add(a);
+        }
+        if (adapter != null) {
+            adapter.notifyDataSetChanged();
+        }
+
+        // El mensaje de "sin alertas" y el botón de borrar dependen de si se ha
+        // recibido alguna alerta (lista maestra), no del resultado del filtro.
+        boolean sinAlertas = alertasRecibidas.isEmpty();
+        if (textoVacio != null) {
+            textoVacio.setVisibility(sinAlertas ? View.VISIBLE : View.GONE);
+        }
+        if (btnBorrarHistorial != null) {
+            btnBorrarHistorial.setVisibility(sinAlertas ? View.GONE : View.VISIBLE);
+        }
+    }
+
+    // Formato en que el servidor guarda DATA_CREACIO ("yyyy-MM-dd HH:mm:ss").
+    private static final SimpleDateFormat FORMATO_SERVIDOR =
+            new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US);
+    private static final SimpleDateFormat FORMATO_DIA =
+            new SimpleDateFormat("yyyy-MM-dd", Locale.US);
+
+    // Compara solo el día (ignora la hora). Parsea la fecha guardada como
+    // string y la reformatea a "yyyy-MM-dd" para compararla con la elegida.
+    private boolean coincideFecha(Alerta a, String fechaIso) {
+        String f = a.getFechaCreacion();
+        if (f == null) {
+            return false;
+        }
+        try {
+            Date d = FORMATO_SERVIDOR.parse(f.trim());
+            return FORMATO_DIA.format(d).equals(fechaIso);
+        } catch (ParseException e) {
+            // Si el formato no coincide, comparamos el prefijo de fecha.
+            return f.trim().startsWith(fechaIso);
+        }
+    }
+
+    // Pide confirmación antes de vaciar el historial almacenado en el dispositivo.
+    private void confirmarBorrado() {
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.borrar_titulo)
+                .setMessage(R.string.borrar_mensaje)
+                .setPositiveButton(R.string.borrar, (d, w) -> borrarHistorial())
+                .setNegativeButton(R.string.cancelar, null)
+                .show();
+    }
+
+    // Vacía la lista maestra, persiste la lista vacía y refresca la vista.
+    private void borrarHistorial() {
+        alertasRecibidas.clear();
+        guardarHistorial(this);
+        aplicarFiltro();
     }
 
     // Consulta al servidor si hay una alerta nueva para este dispositivo.
@@ -176,7 +420,7 @@ public class MainActivity extends AppCompatActivity{
         String canalId = (!alerta.isSilent() && enZona) ? "canal_alerta_urgente_v2" : "canal_alerta_normal_v2";
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, canalId)
                 .setSmallIcon(android.R.drawable.ic_dialog_alert)
-                .setContentTitle("¡Alerta!")
+                .setContentTitle(context.getString(R.string.alerta_titulo))
                 .setContentText(alerta.getTextoAlerta())
                 .setPriority(NotificationCompat.PRIORITY_MAX);
 
@@ -188,35 +432,6 @@ public class MainActivity extends AppCompatActivity{
         NotificationManagerCompat.from(context).notify(2, builder.build());
     }
 
-    // Envía una nueva alerta al servidor con el texto introducido por el usuario.
-    private void crearAlerta() {
-        String textoAlerta = editTextAlerta.getText().toString().trim();
-        if (textoAlerta.isEmpty()) {
-            Toast.makeText(this, "Escribe el texto de la alerta", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        int silencio = switchSilencio.isChecked() ? 1 : 0;
-        String hora = new java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
-                .format(new java.util.Date());
-        Alerta nueva = new Alerta(0, textoAlerta, hora, silencio, Alerta.PENDIENTE);
-        alertasRecibidas.add(0, nueva);
-        guardarHistorial(this);
-        adapter.notifyDataSetChanged();
-        editTextAlerta.setText("");
-
-        new Thread(() -> {
-            boolean ok = Servidor.crearAlerta(ID_DISPOSITIVO, textoAlerta, silencio);
-            if (!ok) {
-                runOnUiThread(() -> {
-                    nueva.estado = Alerta.FALLIDA;
-                    guardarHistorial(this);
-                    adapter.notifyDataSetChanged();
-                    Toast.makeText(this, "Error al enviar la alerta", Toast.LENGTH_SHORT).show();
-                });
-            }
-        }).start();
-    }
-
     private static final int RC_PERMISOS = 10;
 
     // Obtiene el ID del dispositivo y pide los permisos necesarios.
@@ -224,19 +439,29 @@ public class MainActivity extends AppCompatActivity{
     // los permisos, para no lanzar un foreground service de tipo location sin
     // tener el permiso concedido (provocaría un cierre de la app en Android 14+).
     private void prepararApp() {
-        ID_DISPOSITIVO = Settings.Secure.getString(
-                getContentResolver(),
-                Settings.Secure.ANDROID_ID
-        );
-
-        List<String> permisos = new ArrayList<>();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permisos.add(android.Manifest.permission.POST_NOTIFICATIONS);
+        // Solo pedimos los permisos que aún falten. Así, cuando la Activity se
+        // recrea (p. ej. al cambiar de idioma) y los permisos ya están concedidos,
+        // no se vuelve a mostrar el prompt una y otra vez.
+        List<String> pendientes = new ArrayList<>();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && ActivityCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+            pendientes.add(Manifest.permission.POST_NOTIFICATIONS);
         }
-        permisos.add(android.Manifest.permission.ACCESS_FINE_LOCATION);
-        permisos.add(android.Manifest.permission.ACCESS_COARSE_LOCATION);
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED
+                && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            pendientes.add(Manifest.permission.ACCESS_FINE_LOCATION);
+            pendientes.add(Manifest.permission.ACCESS_COARSE_LOCATION);
+        }
 
-        requestPermissions(permisos.toArray(new String[0]), RC_PERMISOS);
+        if (pendientes.isEmpty()) {
+            // Permisos ya concedidos: arrancamos el servicio directamente.
+            iniciarServicio();
+        } else {
+            requestPermissions(pendientes.toArray(new String[0]), RC_PERMISOS);
+        }
     }
 
     @Override
@@ -255,6 +480,30 @@ public class MainActivity extends AppCompatActivity{
             startForegroundService(srv);
         } else {
             startService(srv);
+        }
+        pedirExencionBateria();
+    }
+
+    // Pide al sistema que excluya la app de la optimización de batería (Doze).
+    // Sin esto, con la pantalla apagada el sistema estrangula la red del
+    // servicio y las alertas dejan de llegar o llegan con mucho retraso.
+    // En fabricantes agresivos (Xiaomi/MIUI) además hay que activar el
+    // "Inicio automático" y bloquear la app en recientes manualmente.
+    private void pedirExencionBateria() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return;
+        }
+        PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        if (pm == null || pm.isIgnoringBatteryOptimizations(getPackageName())) {
+            return;
+        }
+        try {
+            Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+            intent.setData(Uri.parse("package:" + getPackageName()));
+            startActivity(intent);
+        } catch (Exception e) {
+            // Algunos fabricantes no exponen esta pantalla; el usuario deberá
+            // desactivar la optimización manualmente desde Ajustes.
         }
     }
 }

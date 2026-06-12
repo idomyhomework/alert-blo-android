@@ -33,22 +33,11 @@ public class AlertaAdapter extends ArrayAdapter<Alerta> {
 
         if (alerta != null) {
             textoPrincipal.setText(alerta.getTextoAlerta());
-            textoSubitem.setText(alerta.getDateFormatted());
+            textoSubitem.setText(alerta.getFechaCreacion());
 
-            switch (alerta.getEstado()) {
-                case Alerta.PENDIENTE:
-                    textoEstado.setText("Pendiente");
-                    textoEstado.setBackgroundColor(0xFFFF9800);
-                    break;
-                case Alerta.FALLIDA:
-                    textoEstado.setText("Fallida");
-                    textoEstado.setBackgroundColor(0xFFF44336);
-                    break;
-                default:
-                    textoEstado.setText("Recibida");
-                    textoEstado.setBackgroundColor(0xFF81C784);
-                    break;
-            }
+            // El ciudadano solo recibe alertas: siempre se muestran como "Recibida".
+            textoEstado.setText(R.string.estado_recibida);
+            textoEstado.setBackgroundColor(0xFF81C784);
         }
 
         return convertView;

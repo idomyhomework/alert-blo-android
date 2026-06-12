@@ -3,6 +3,9 @@
     <style name="Base.Theme.AlertBLO" parent="Theme.Material3.DayNight.NoActionBar">
         <!-- Customize your light theme here. -->
         <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
+        <!-- Fondo de ventana: evita el parpadeo negro al recrear la Activity
+             (p. ej. al cambiar de idioma con setApplicationLocales). -->
+        <item name="android:windowBackground">?attr/colorSurface</item>
     </style>
 
     <style name="Theme.AlertBLO" parent="Base.Theme.AlertBLO" />

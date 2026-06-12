@@ -31,25 +31,6 @@ public class Servidor {
         }
     }
 
-    // Envía una nueva alerta al servidor.
-    // Devuelve true si se ha creado correctamente.
-    public static boolean crearAlerta(String idDispositivo, String textoAlerta, int silencio) {
-        try {
-            String body = "ID_DISPOSITIU=" + URLEncoder.encode(idDispositivo, "UTF-8")
-                    + "&TEXT_ALERTA=" + URLEncoder.encode(textoAlerta, "UTF-8")
-                    + "&silencio=" + silencio;
-            HttpURLConnection conn = abrir(MainActivity.IP_SERVIDOR + "/create_alerta_silencio.php", "POST");
-            conn.setDoOutput(true);
-            conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-            conn.getOutputStream().write(body.getBytes("UTF-8"));
-            String resp = leer(conn);
-            conn.disconnect();
-            return "OK".equals(resp);
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
     // Abre la conexión con timeout de 5 s
     private static HttpURLConnection abrir(String url, String metodo) throws Exception {
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();

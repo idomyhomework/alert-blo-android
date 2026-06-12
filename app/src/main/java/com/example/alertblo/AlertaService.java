@@ -37,7 +37,7 @@ public class AlertaService extends Service {
         crearCanales();
         // Notificación persistente obligatoria para ForegroundService
         Notification notifServicio = new NotificationCompat.Builder(this, CANAL_SERVICIO)
-                .setContentTitle("Servicio de alertas activo")
+                .setContentTitle(getString(R.string.servicio_activo))
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setPriority(NotificationCompat.PRIORITY_MIN)
                 .build();
@@ -75,17 +75,28 @@ public class AlertaService extends Service {
         super.onDestroy();
     }
 
-    // Crea los dos canales de notificación
+    // Crea los canales de notificación
     private void crearCanales() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationManager nm = getSystemService(NotificationManager.class);
+
+            // Canal del SERVICIO en primer plano. Sin él, la notificación
+            // persistente no se muestra (Android 8+ descarta notificaciones
+            // enviadas a un canal inexistente) y no se puede ver si el
+            // servicio sigue vivo. Importancia LOW: visible pero silenciosa.
+            NotificationChannel canalServicio = new NotificationChannel(
+                    CANAL_SERVICIO,
+                    getString(R.string.servicio_activo),
+                    NotificationManager.IMPORTANCE_LOW);
+            canalServicio.setShowBadge(false);
+            nm.createNotificationChannel(canalServicio);
 
             // Canal NORMAL — respeta silencio del móvil.
             nm.deleteNotificationChannel("canal_alerta_normal");
             nm.deleteNotificationChannel("canal_alerta_normal_v2");
             NotificationChannel canalNormal = new NotificationChannel(
                     "canal_alerta_normal_v2",
-                    "Alertas normales",
+                    getString(R.string.canal_normal),
                     NotificationManager.IMPORTANCE_HIGH);
             canalNormal.setSound(
                     android.provider.Settings.System.DEFAULT_NOTIFICATION_URI,
@@ -100,7 +111,7 @@ public class AlertaService extends Service {
             nm.deleteNotificationChannel("canal_alerta_urgente_v2");
             NotificationChannel canalUrgente = new NotificationChannel(
                     "canal_alerta_urgente_v2",
-                    "Alertas urgentes",
+                    getString(R.string.canal_urgente),
                     NotificationManager.IMPORTANCE_HIGH);
             canalUrgente.setBypassDnd(true);
             canalUrgente.setSound(

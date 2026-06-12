@@ -1,3 +1,48 @@
 <resources>
+    <!-- Idioma por defecto: castellano -->
     <string name="app_name">Alert BLO</string>
+    <string name="titulo_app">AlertBLO</string>
+    <string name="titulo_historial">Historial de alertas</string>
+
+    <!-- Permiso No molestar -->
+    <string name="permiso_titulo">Permiso necesario</string>
+    <string name="permiso_mensaje">Para que las alertas críticas suenen aunque el móvil esté en silencio, necesitamos acceso a \"No molestar\". Pulsa Aceptar para concederlo.</string>
+    <string name="aceptar">Aceptar</string>
+    <string name="cancelar">Cancelar</string>
+
+    <!-- Permiso optimización de batería -->
+    <string name="bateria_titulo">Desactivar optimización de batería</string>
+    <string name="bateria_mensaje">Para recibir alertas en cualquier momento, aunque la app esté cerrada, el sistema no debe limitar su funcionamiento en segundo plano. Pulsa Aceptar y permite que la app se ejecute sin restricciones.</string>
+
+    <!-- Notificaciones -->
+    <string name="alerta_titulo">¡Alerta!</string>
+    <string name="servicio_activo">Servicio de alertas activo</string>
+    <string name="canal_normal">Alertas normales</string>
+    <string name="canal_urgente">Alertas urgentes</string>
+
+    <!-- Estado de la alerta en el historial -->
+    <string name="estado_recibida">Recibida</string>
+
+    <!-- Selector de idioma -->
+    <string name="cambiar_idioma">Cambiar idioma</string>
+
+    <!-- Filtros -->
+    <string name="btn_filtros">Filtros</string>
+    <string name="buscar_hint">Buscar alerta…</string>
+    <string name="tipo_alerta_label">Tipo de alerta:</string>
+    <string name="filtro_todas">Todas</string>
+    <string name="filtro_urgentes">Urgentes</string>
+    <string name="filtro_silenciadas">Silenciadas</string>
+    <string name="filtro_fecha">Fecha de creación</string>
+    <string name="limpiar_filtros">Limpiar</string>
+    <string name="ocultar_filtros">Ocultar</string>
+
+    <!-- Estado vacío -->
+    <string name="empty_historial">Todavía no has recibido ninguna alerta</string>
+
+    <!-- Borrar historial -->
+    <string name="borrar_historial">Borrar historial</string>
+    <string name="borrar_titulo">Borrar historial</string>
+    <string name="borrar_mensaje">¿Seguro que quieres borrar todas las alertas guardadas? Esta acción no se puede deshacer.</string>
+    <string name="borrar">Borrar</string>
 </resources>
